@@ -6,11 +6,10 @@ plugins {
 android {
     namespace = "com.iw.aeroskin"
     compileSdk = 34
-    // buildToolsVersion = "30.0.3"
 
     defaultConfig {
         applicationId = "com.iw.aeroskin"
-        minSdk = 21
+        minSdk = 24 // CameraX works best with API 24+
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -35,12 +34,31 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // --- ADD THIS BLOCK FOR VIEW BINDING ---
+    buildFeatures {
+        viewBinding = true
+    }
+    // ------------------------------------
 }
 
-// MAKE SURE THIS BLOCK HAS PARENTHESES
 dependencies {
     implementation("androidx.core:core-ktx:1.9.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.9.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+
+    // --- ADD THE FOLLOWING DEPENDENCIES ---
+
+    // CameraX core libraries (using a variable for the version is good practice)
+    val cameraxVersion = "1.3.1" // Using a slightly newer stable version
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // NanoHTTPD Lightweight Web Server
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+
+    // ------------------------------------
 }
