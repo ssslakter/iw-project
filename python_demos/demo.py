@@ -5,7 +5,7 @@ from matplotlib.animation import FuncAnimation
 
 # --- CONFIGURATION ---
 # IMPORTANT: Replace this with the IP address shown on your phone's screen.
-PHONE_IP_ADDRESS = "192.168.0.15" 
+PHONE_IP_ADDRESS = "192.168.163.148" 
 # --------------------
 
 # --- Do not change these unless you changed them in the app ---
