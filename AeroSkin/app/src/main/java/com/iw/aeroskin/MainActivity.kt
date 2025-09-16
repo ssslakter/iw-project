@@ -1,102 +1,108 @@
 package com.iw.aeroskin
 
-import android.Manifest
-import android.content.pm.PackageManager
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.iw.aeroskin.camera.CameraHandler
+import com.iw.aeroskin.data.BrightnessRepository
 import com.iw.aeroskin.databinding.ActivityMainBinding
-import fi.iki.elonen.NanoHTTPD
-import java.net.Inet4Address
-import java.net.NetworkInterface
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import com.iw.aeroskin.network.ServerManager
+import com.iw.aeroskin.permissions.PermissionManager
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), ServerManager.ServerStatusListener {
 
-    // ViewBinding for easy access to UI elements
     private lateinit var binding: ActivityMainBinding
-
-    // A dedicated thread for camera analysis to avoid blocking the UI
-    private lateinit var cameraExecutor: ExecutorService
-
-    // The web server instance
-    private var webServer: BrightnessWebServer? = null
-    private val serverPort = 8080
-
-    // A thread-safe variable to hold the latest brightness value
-    @Volatile
-    private var latestBrightness: Double = 0.0
+    private lateinit var serverManager: ServerManager
+    private lateinit var cameraHandler: CameraHandler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Set up the button to toggle the server on and off
+        // Initialize the server manager, passing the activity as the listener
+        serverManager = ServerManager(this)
+
+        // Initialize the camera handler
+        // The lambda updates the BrightnessRepository only if the source is SENSOR
+        cameraHandler = CameraHandler(this) { luma ->
+            if (BrightnessRepository.source == BrightnessRepository.Source.SENSOR) {
+                BrightnessRepository.setBrightness(luma)
+            }
+        }
+
+        // Set up all UI listeners and initial states
+        setupUI()
+        // Start observing brightness changes from the repository
+        observeBrightness()
+    }
+
+    private fun setupUI() {
+        // --- Toggle Server Button ---
         binding.toggleServerButton.setOnClickListener {
-            if (webServer?.isAlive == true) {
-                stopServer()
+            if (serverManager.isServerRunning()) {
+                stopServerAndCamera()
             } else {
-                // Request camera permission before starting
-                requestCameraPermission()
+                // Check for camera permission before starting
+                PermissionManager.checkCameraPermission(this) {
+                    startServerAndCamera()
+                }
             }
         }
 
-        cameraExecutor = Executors.newSingleThreadExecutor()
-    }
-
-    // --- Web Server Implementation (using NanoHTTPD) ---
-    inner class BrightnessWebServer : NanoHTTPD(serverPort) {
-        override fun serve(session: IHTTPSession?): Response {
-            // We only respond to requests for "/brightness"
-            if (session?.method == Method.GET && session.uri == "/brightness") {
-                // Create a simple JSON response
-                val json = "{\"brightness\": $latestBrightness}"
-                return newFixedLengthResponse(Response.Status.OK, "application/json", json)
-            }
-            // For any other request, return a 404 Not Found error
-            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
-        }
-    }
-
-    // --- Server Control Functions ---
-    private fun startServer() {
-        // Get the device's local IP address to display it
-        val ipAddress = getDeviceIpAddress()
-        if (ipAddress == null) {
-            binding.statusText.text = "Error: Could not get IP Address"
-            return
+        // --- Manual Mode Button ---
+        binding.manualModeButton.setOnClickListener {
+            val intent = Intent(this, ManualBrightnessActivity::class.java)
+            startActivity(intent)
         }
 
-        try {
-            webServer = BrightnessWebServer()
-            webServer?.start()
-            runOnUiThread {
-                binding.statusText.text = "Server Running"
-                binding.ipAddressText.text = "http://$ipAddress:$serverPort"
-                binding.toggleServerButton.text = "Stop Server"
-            }
-            // Once the server is running, start the camera analysis
-            startCamera()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            runOnUiThread {
-                binding.statusText.text = "Error starting server"
+        // --- Brightness Source Switch ---
+        binding.sourceSwitch.setOnCheckedChangeListener { _, isChecked ->
+            BrightnessRepository.source = if (isChecked) {
+                BrightnessRepository.Source.MANUAL
+            } else {
+                BrightnessRepository.Source.SENSOR
             }
         }
     }
 
-    private fun stopServer() {
-        webServer?.stop()
-        // Stop camera analysis when the server stops
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.get().unbindAll()
+    /**
+     * Observes the brightness value from the central repository and updates the UI.
+     */
+    private fun observeBrightness() {
+        lifecycleScope.launch {
+            BrightnessRepository.brightness.collectLatest { brightness ->
+                runOnUiThread {
+                    binding.brightnessText.text = String.format("%.2f", brightness)
+                }
+            }
+        }
+    }
 
+    private fun startServerAndCamera() {
+        serverManager.startServer()
+        cameraHandler.startCamera()
+    }
+
+    private fun stopServerAndCamera() {
+        serverManager.stopServer()
+        cameraHandler.stopCamera()
+    }
+
+    // --- ServerStatusListener Callbacks ---
+
+    override fun onServerRunning(ipAddress: String) {
+        runOnUiThread {
+            binding.statusText.text = "Server Running"
+            binding.ipAddressText.text = ipAddress
+            binding.toggleServerButton.text = "Stop Server"
+        }
+    }
+
+    override fun onServerStopped() {
         runOnUiThread {
             binding.statusText.text = "Server Stopped"
             binding.ipAddressText.text = "IP: N/A"
@@ -104,101 +110,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- CameraX Implementation ---
-    private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
-            // Set up the ImageAnalysis use case
-            val imageAnalyzer = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
-                        // This is where we get the brightness value from the analyzer
-                        latestBrightness = luma
-                        runOnUiThread {
-                            // Update the UI with the new brightness value
-                            binding.brightnessText.text = String.format("%.2f", luma)
-                        }
-                    })
-                }
-
-            // Select the back camera
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-            try {
-                // Unbind everything before rebinding
-                cameraProvider.unbindAll()
-                // Bind the use case to the activity's lifecycle
-                cameraProvider.bindToLifecycle(
-                    this, cameraSelector, imageAnalyzer
-                )
-            } catch (exc: Exception) {
-                // Handle exceptions
-            }
-
-        }, ContextCompat.getMainExecutor(this))
-    }
-
-    // --- Brightness Calculation Logic ---
-    private class LuminosityAnalyzer(private val listener: (Double) -> Unit) : ImageAnalysis.Analyzer {
-        override fun analyze(image: androidx.camera.core.ImageProxy) {
-            // The image format from CameraX is YUV. The first plane (Y) is the luminance plane.
-            val buffer = image.planes[0].buffer
-            val data = ByteArray(buffer.remaining())
-            buffer.get(data)
-
-            // Calculate the average luminance (brightness)
-            val averageLuma = data.map { it.toInt() and 0xFF }.average()
-
-            listener(averageLuma)
-
-            // CRITICAL: Must close the image to receive the next one
-            image.close()
+    override fun onServerError(message: String) {
+        runOnUiThread {
+            binding.statusText.text = "Error: $message"
         }
     }
 
-    // --- Utility and Permission Handling ---
-    private fun requestCameraPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            startServer() // Permission is already granted
-        } else {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
-        }
-    }
+    // --- Permission Handling ---
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startServer() // Permission was granted
-        } else {
-            // Permission was denied
-        }
-    }
-
-    private fun getDeviceIpAddress(): String? {
-        // A helper function to find the device's non-loopback IPv4 address
-        try {
-            val networkInterfaces = NetworkInterface.getNetworkInterfaces().toList()
-            for (intf in networkInterfaces) {
-                val addrs = intf.inetAddresses.toList()
-                for (addr in addrs) {
-                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
-                        return addr.hostAddress
-                    }
-                }
+        PermissionManager.onRequestPermissionsResult(
+            requestCode,
+            grantResults,
+            onPermissionGranted = { startServerAndCamera() },
+            onPermissionDenied = {
+                // Optionally, show a message to the user that permission is needed
             }
-        } catch (ex: Exception) {
-            ex.printStackTrace()
-        }
-        return null
+        )
     }
 
+    /**
+     * Sync the UI switch state with the repository when the activity is resumed.
+     */
+    override fun onResume() {
+        super.onResume()
+        binding.sourceSwitch.isChecked = (BrightnessRepository.source == BrightnessRepository.Source.MANUAL)
+    }
+
+    /**
+     * Clean up resources when the activity is destroyed.
+     */
     override fun onDestroy() {
         super.onDestroy()
-        stopServer()
-        cameraExecutor.shutdown()
+        stopServerAndCamera()
     }
 }

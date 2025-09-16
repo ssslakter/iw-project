@@ -56,4 +56,16 @@
         android:layout_marginTop="32dp"
         android:text="Start Server" />
 
+
+<com.google.android.material.switchmaterial.SwitchMaterial
+    android:id="@+id/sourceSwitch"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="Use Manual Brightness" />
+
+<Button
+    android:id="@+id/manualModeButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="Manual Control" />
 </LinearLayout>

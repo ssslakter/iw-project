@@ -47,6 +47,15 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.9.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2") // Use the latest version
+
+    // For collecting flows from the UI
+    implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.2") // Use the latest version
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2" )// Use the latest version
+
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // --- ADD THE FOLLOWING DEPENDENCIES ---
 
