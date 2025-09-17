@@ -52,7 +52,8 @@ dependencies {
     // For collecting flows from the UI
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.2") // Use the latest version
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.2" )// Use the latest version
-
+    implementation("androidx.activity:activity-ktx:1.9.0")
+    
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

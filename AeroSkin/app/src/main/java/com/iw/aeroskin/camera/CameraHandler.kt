@@ -1,22 +1,25 @@
 package com.iw.aeroskin.camera
 
-import androidx.appcompat.app.AppCompatActivity
+import android.content.Context
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner // <-- Import this
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class CameraHandler(
-    private val activity: AppCompatActivity,
+    // It only needs a Context to get the CameraProvider instance
+    private val context: Context,
     private val onBrightnessUpdate: (Double) -> Unit
 ) {
-    private lateinit var cameraExecutor: ExecutorService
+    private var cameraExecutor: ExecutorService? = null
 
-    fun startCamera() {
+    // This is the key change: startCamera now requires the LifecycleOwner
+    fun startCamera(lifecycleOwner: LifecycleOwner) {
         cameraExecutor = Executors.newSingleThreadExecutor()
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(activity)
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
@@ -24,7 +27,8 @@ class CameraHandler(
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
+                    // Use the non-null executor
+                    it.setAnalyzer(cameraExecutor!!, LuminosityAnalyzer { luma ->
                         onBrightnessUpdate(luma)
                     })
                 }
@@ -33,19 +37,20 @@ class CameraHandler(
 
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(activity, cameraSelector, imageAnalyzer)
+                // It now binds to the lifecycleOwner passed into the method
+                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageAnalyzer)
             } catch (exc: Exception) {
                 // Handle exceptions
+                exc.printStackTrace()
             }
 
-        }, ContextCompat.getMainExecutor(activity))
+        }, ContextCompat.getMainExecutor(context))
     }
 
     fun stopCamera() {
-        if (::cameraExecutor.isInitialized && !cameraExecutor.isShutdown) {
-            cameraExecutor.shutdown()
-        }
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(activity)
+        cameraExecutor?.shutdown()
+        cameraExecutor = null // Set to null to allow for restart
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.get().unbindAll()
     }
 }

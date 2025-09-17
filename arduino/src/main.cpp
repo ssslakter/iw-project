@@ -1,60 +1,77 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
-// put function declarations here:
-int myFunction(int, int);
+#include "config.h"
+#include "wifi_manager.h"
+#include "converters.h"
+#include "motor.h"
 
-// ESP32 Built-in Sensor Data Logger
-
-// The ESP32 has a built-in Hall effect sensor, a temperature sensor, 
-// and capacitive touch pins. This program reads data from these sensors 
-// and displays it in the serial monitor.
-
-// Define the touch pin to be used
-// GPIO4 is a good choice as it is T0
-const int touchPin = 4; 
+// --- Global Variables ---
+HTTPClient http;
+unsigned long lastHttpUpdateTime = 0;
+unsigned long lastServoUpdateTime = 0;
 
 void setup() {
-  // Initialize Serial Monitor
   Serial.begin(115200);
-  Serial.println("ESP32 Built-in Sensor Data Logger");
+  Serial.println("\n--- ESP32 Smooth Motion Client ---");
+
+  connectToWiFi();
+  setupServo();
+}
+
+
+void handleHttpRequests() {
+  String apiUrl = "http://" + String(PHONE_IP_ADDRESS) + ":" + String(PHONE_PORT) + String(API_ENDPOINT);
+
+  http.begin(apiUrl);
+  // Set a short timeout to prevent the loop from blocking for too long
+  http.setTimeout(HTTP_UPDATE_INTERVAL_MS - 50);
+  int httpCode = http.GET();
+
+  if (httpCode == HTTP_CODE_OK) {
+    String payload = http.getString();
+    StaticJsonDocument<128> doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (!error && doc.containsKey("brightness")) {
+      int brightness = doc["brightness"];
+      int newServoAngle = calculateServoAngleFromBrightness(brightness);
+
+      // --- Log the new target ---
+      Serial.print("New Data: Brightness=");
+      Serial.print(brightness);
+      Serial.print(", Target Angle=");
+      Serial.println(newServoAngle);
+
+      // --- SET THE NEW TARGET (does not move the servo directly) ---
+      setTargetAngle(newServoAngle);
+
+    } else {
+      Serial.println("Error parsing JSON.");
+    }
+  } else {
+    // Don't print error on timeout, it's expected sometimes
+    if (httpCode > 0) {
+      Serial.printf("HTTP Error. Code: %d\n", httpCode);
+    }
+  }
+  http.end();
 }
 
 void loop() {
-  // --- Read Hall Effect Sensor ---
-  // The hallRead() function returns the value from the internal Hall effect sensor.
-  // This value changes in the presence of a magnetic field.
-  int hallValue = hallRead();
+  unsigned long currentTime = millis();
 
-  // --- Read Internal Temperature Sensor ---
-  // The temperatureRead() function returns the internal temperature of the ESP32 chip in Fahrenheit.
-  // Note: This is the temperature of the chip itself, not the ambient temperature.
-  float tempF = temperatureRead();
-  // Convert Fahrenheit to Celsius
-  float tempC = (tempF - 32) / 1.8;
+  // --- Task 1: Fetch data from the server (less frequent) ---
+  if (currentTime - lastHttpUpdateTime >= HTTP_UPDATE_INTERVAL_MS) {
+    lastHttpUpdateTime = currentTime;
+    handleHttpRequests();
+  }
 
-  // --- Read Capacitive Touch Sensor ---
-  // The touchRead() function returns a value from the specified touch-enabled GPIO pin.
-  // The value will be lower when the pin is touched.
-  int touchValue = touchRead(touchPin);
-
-  // --- Print Sensor Data to Serial Monitor ---
-  Serial.print("Hall Effect: ");
-  Serial.print(hallValue);
-  
-  Serial.print("  |  Internal Temperature: ");
-  Serial.print(tempC);
-  Serial.print(" °C");
-  
-  Serial.print("  |  Touch Pin (GPIO");
-  Serial.print(touchPin);
-  Serial.print("): ");
-  Serial.println(touchValue);
-
-  // Wait for a second before the next reading
-  delay(1000);
-}
-
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+  // --- Task 2: Update the servo's physical position (very frequent) ---
+  if (currentTime - lastServoUpdateTime >= SERVO_UPDATE_INTERVAL_MS) {
+    lastServoUpdateTime = currentTime;
+    updateServoPosition();
+  }
 }
