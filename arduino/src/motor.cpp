@@ -1,34 +1,42 @@
+#include <AccelStepper.h>
 #include "motor.h"
-#include <ESP32Servo.h>
 #include "config.h"
 
-Servo microServo;
+// Define the AccelStepper interface type for a 4-pin driver
+#define MotorInterfaceType AccelStepper::HALF4WIRE
+const long STEPS_FOR_60_DEGREES = 1365;
+const long offset = 0;
 
-// State variables for smoothing
-int targetAngle = 90; // The angle we want to reach
-float currentAngle = 90.0; // The servo's current angle, as a float for precision
+// Create an instance of the AccelStepper class
+// Note: The pin order is IN1, IN3, IN2, IN4 for some drivers to ensure
+// correct rotational direction. If your motor turns the wrong way,
+// try swapping the middle two pins: AccelStepper(MotorInterfaceType, STEPPER_IN1, STEPPER_IN3, STEPPER_IN2, STEPPER_IN4);
+AccelStepper stepper = AccelStepper(MotorInterfaceType, STEPPER_IN1, STEPPER_IN3, STEPPER_IN2, STEPPER_IN4);
 
-void setupServo() {
-  microServo.attach(SERVO_GPIO_PIN);
-  microServo.write(currentAngle); // Start at the initial position
-  Serial.println("Servo motor initialized for smooth motion on GPIO " + String(SERVO_GPIO_PIN));
+void setupStepper() {
+  Serial.println("Initializing stepper motor...");
+  stepper.setMaxSpeed(STEPPER_MAX_SPEED);
+  stepper.setAcceleration(STEPPER_ACCELERATION);
+  stepper.setCurrentPosition(0); // Start at the 0 position
 }
 
-void setTargetAngle(int newTarget) {
-  // Constrain the new target to a valid range and update our state
-  targetAngle = constrain(newTarget, MIN_SERVO_ANGLE, MAX_SERVO_ANGLE);
+void moveStepperToBrightness(int brightness) {
+  // Map the brightness value (0-255) to a stepper position (0 - STEPS_FOR_180_DEGREES)
+  long targetPosition = map(brightness, MIN_BRIGHTNESS, MAX_BRIGHTNESS, -STEPS_FOR_60_DEGREES, STEPS_FOR_60_DEGREES);
+
+  // Tell the stepper to move to the new target position
+  stepper.moveTo(offset + targetPosition);
+
+  Serial.print("Stepper Target: Brightness ");
+  Serial.print(brightness);
+  Serial.print(" -> Position ");
+  Serial.println(targetPosition);
 }
 
-void updateServoPosition() {
-  // Check if the servo is already at the target
-  // Use a small tolerance to prevent jittering when very close
-  if (abs(targetAngle - currentAngle) > 0.5) {
-    // Linear Interpolation (Lerp)
-    // Move the current angle a small fraction of the way towards the target
-    currentAngle = currentAngle + (targetAngle - currentAngle) * SMOOTHING_FACTOR;
-
-    // Update the physical servo's position
-    // The write() function takes an int, so we round the float value
-    microServo.write((int)round(currentAngle));
-  }
+void runStepper() {
+  // This is the magic function from AccelStepper.
+  // It checks if the motor needs to move and sends step pulses if it does.
+  // Calling this continuously in the main loop creates smooth movement
+  // without blocking the rest of your code.
+  stepper.run();
 }

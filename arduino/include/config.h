@@ -1,31 +1,38 @@
 #pragma once
 
 // --- Wi-Fi Configuration ---
-#define WIFI_SSID "wifi-name"
-#define WIFI_PASSWORD "pswd"
+#define WIFI_SSID "huawei"
+#define WIFI_PASSWORD "yarik54321"
 
 // --- Server Configuration ---
-// IMPORTANT: Replace this with the IP address shown on your phone's screen.
-#define PHONE_IP_ADDRESS "192.168.6.23"
+#define PHONE_IP_ADDRESS "192.168.246.44"
 #define PHONE_PORT 8080
 #define API_ENDPOINT "/brightness"
 
-
-#define SERVO_GPIO_PIN 13
-#define SMOOTHING_FACTOR 0.5 // Tune this value (0.0 to 1.0). Lower is smoother.
-
 // --- Control Parameters ---
-#define HTTP_UPDATE_INTERVAL_MS 200 // How often to fetch data from the server (in milliseconds)
-#define SERVO_UPDATE_INTERVAL_MS 20 // How often to update the servo's physical position (50Hz)
-
+#define UPDATE_INTERVAL_SECONDS 0.01
 
 // --- Conversion Mapping ---
-// Voltage mapping (Luminance from camera is 0-255)
 #define MIN_VOLTAGE 0.0
 #define MAX_VOLTAGE 5.0
 #define MIN_BRIGHTNESS 0
-#define MAX_BRIGHTNESS 255
-
-// Servo mapping (adjust if you are using a servo)
+#define MAX_BRIGHTNESS 1000
 #define MIN_SERVO_ANGLE 0
 #define MAX_SERVO_ANGLE 180
+
+// --- Stepper Motor Configuration ---
+// The four control pins for the stepper motor driver (e.g., ULN2003)
+#define STEPPER_IN1 13
+#define STEPPER_IN2 27
+#define STEPPER_IN3 14
+#define STEPPER_IN4 12
+
+// Performance settings for the stepper motor
+#define STEPPER_MAX_SPEED 500.0
+#define STEPPER_ACCELERATION 500.0
+
+// Steps for a 180-degree rotation. You may need to adjust this value
+// based on your specific stepper motor's steps per revolution and gear ratio.
+// A common 28BYJ-48 geared stepper has 2048 steps for a full 360-degree
+// revolution of the output shaft, so 1024 steps is 180 degrees.
+#define STEPS_FOR_180_DEGREES 2048

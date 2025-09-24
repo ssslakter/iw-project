@@ -16,13 +16,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".ManualBrightnessActivity" />
     </application>
 
     <!-- Add these permissions before the <application> tag -->
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-permission android:name="android.permission.INTERNET" />
+<!-- Request legacy Bluetooth permissions -->
+<uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 
+<!-- Needed for BLE scanning on Android 6 to 11 -->
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+<!-- Needed for BLE scanning and connecting on Android 12+ -->
+<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+<!-- Tell the system this app uses BLE -->
+<uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
 <!-- Declare that the app uses a camera -->
 <uses-feature android:name="android.hardware.camera.any" />
 
